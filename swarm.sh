@@ -1,41 +1,43 @@
 #!/bin/bash
 set -e
 
+[[ $LOGLEVEL == 'DEBUG' ]] && set -x
+
 # checks and defaults
+JENKINS_HOME=${HOME}
+SWARM_JAR=/usr/share/jenkins/swarm-client.jar
 
-SWARM_JAR="$JENKINS_HOME"/swarm-client-"$SWARM_VERSION"-jar-with-dependencies.jar
+[ -z "$SWARM_MASTER" ] && echo "INFO: SWARM_MASTER was not specified, enabling autodiscovery"
+[ -z "$SWARM_DESCRIPTION" ] && SWARM_DESCRIPTION="INFO: Swarm version: $SWARM_VERSION - Jenkins slave"
 
-[ -z "$SWARM_MASTER" ] && echo "SWARM_MASTER was not specified, enabling autodiscovery"
-                   
-[ -z "$SWARM_NAME" ] && SWARM_NAME="$HOSTNAME"
-[ -z "$SWARM_DESCRIPTION" ] && SWARM_DESCRIPTION="Swarm version: $SWARM_VERSION - Jenkins slave for docker jobs"
+SWARM_NAME="${SWARM_NAME:-$HOSTNAME}"
+SWARM_EXECUTORS="${SWARM_EXECUTORS:-1}"
+SWARM_MODE="${SWARM_MODE:-exclusive}"
+SWARM_LABELS="${SWARM_LABELS:-docker}"
+SWARM_RETRY="${SWARM_RETRY:-10}"
 
-[ -z "$SWARM_EXECUTORS" ] && SWARM_EXECUTORS="1"
-[ -z "$SWARM_MODE" ] && SWARM_MODE="exclusive"
-[ -z "$SWARM_LABELS" ] && SWARM_LABELS="docker"
-
-[ -z "$SWARM_RETRY" ] && SWARM_RETRY="10"
-[ -z "$SWARM_CREDFILE" ] && SWARM_CREDFILE="/etc/jenkmaster-creds/jenkmaster-creds"
-
-[ -z "$DOCKER_CONFIGFILE" ] && DOCKER_CONFIGFILE="/etc/docker-config/.dockercfg"
-
-# links
-
-[ -f $DOCKER_CONFIGFILE ] && ln -s "$DOCKER_CONFIGFILE" "$JENKINS_HOME"/.dockercfg
+SWARM_CREDENTIALS="${SWARM_CREDENTIALS:-/etc/swarm/credentials}"
+if [[ $SWARM_CREDENTIALS =~ .*:.* ]]; then
+    echo 'WARN: Do not use colons, ":" or forwardslashes, "/" in your "username:password"'
+    _USERNAME=$(echo $SWARM_CREDENTIALS|sed 's/:.*//')
+    _PASSWORD=$(echo $SWARM_CREDENTIALS|sed 's/.*://')
+    _CREDENTIALS="-username $_USERNAME -password $_PASSWORD"
+elif [ -f $SWARM_CREDENTIALS ]; then
+    _CREDENTIALS=$(echo "-username $(head -n1 $SWARM_CREDENTIALS) \
+                         -password $(tail -n1 $SWARM_CREDENTIALS)")
+fi
 
 # entrypoint
-
 exec java -jar "$SWARM_JAR" \
           -fsroot "$JENKINS_HOME" \
           -noRetryAfterConnected \
           -showHostName \
-          $([ -n "$SWARM_MASTER" ] && echo '-master "$SWARM_MASTER"' )\
+          $([ -n "$SWARM_MASTER" ] && echo '-master "$SWARM_MASTER"')\
           -name "$SWARM_NAME" \
           -description "$SWARM_DESCRIPTION" \
           -executors "$SWARM_EXECUTORS" \
           -mode "$SWARM_MODE" \
           -labels "$SWARM_LABELS" \
           -retry "$SWARM_RETRY" \
-          $([ -f $SWARM_CREDFILE ] && echo "-username $(head -n1 $SWARM_CREDFILE) \
-                                            -password $(tail -n1 $SWARM_CREDFILE)") \
+          $([ -z "$_CREDENTIALS" ] || echo "$_CREDENTIALS")\
           "$@"

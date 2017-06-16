@@ -1,19 +1,27 @@
+---
 
-jslave:
-  build: .
-  # image: dockerjenkinsswarmslave_jslave
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - /usr/local/bin/docker:/bin/docker
-    # - /var/lib/docker:/var/lib/docker
-    - ./home/jenkmaster-creds:/etc/jenkmaster-creds
-    - ../sirjenkins/ci:/ci
-    - ~/.docker/config.json:/var/jenkins_home/.docker/config.json
-    # - ~/.ssh:/var/jenkins_home/.ssh
-  environment:
-    # - 'SWARM_MASTER=http://sirjenkins:8080'
-    - 'EXECUTORS=1'
-    - 'SWARM_LABELS=docker sbt'
-  external_links:
-    - sirjenkins_sirjenkins_1
-  privileged: true
+
+version: '3'
+services:
+  swarm:
+    depends_on: ['dind']
+    build: swarm-agent
+    environment:
+      - SWARM_LABELS=docker dind
+      - LOGLEVEL=DEBUG
+    # external_links:
+    #   - jenkins
+    volumes:
+      - ./.credentials:/etc/swarm/credentials
+      - jenkins:/home/jenkins
+      - varrun:/var/run
+  dind:
+    image: docker:17.03.1-ce-dind
+    volumes:
+      - jenkins:/home/jenkins
+      - varrun:/var/run
+    privileged: true
+
+volumes:
+  varrun: {}
+  jenkins: {}
